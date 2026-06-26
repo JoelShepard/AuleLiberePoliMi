@@ -4,6 +4,9 @@ Questo file documenta le decisioni, l'architettura e le convenzioni
 del progetto **AuleLiberePoliMi**, emerse dalla conversazione con
 l'utente (Joel Shepard). Leggilo prima di lavorare sul progetto.
 
+Collocato nella root del progetto per essere caricato automaticamente
+dall'harness pi.
+
 ---
 
 ## ⚙️ Visione del progetto

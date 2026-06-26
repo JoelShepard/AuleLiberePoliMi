@@ -81,10 +81,10 @@ AuleLiberePoliMi/
 │       ├── style.css             # Stile tema Telegram
 │       └── script.js             # Logica preferenze client-side
 ├── photos/
+├── AGENTS.md                   # Contesto per AI agent (root)
 │   └── bonk.jpg                  # Meme per input errati
 └── docs/
     ├── README.md                 # Questa documentazione
-    ├── AGENTS.md                 # Contesto per AI agent
     └── TODO.md                   # Piano di rinnovamento
 ```
 
