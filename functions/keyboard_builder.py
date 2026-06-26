@@ -23,10 +23,10 @@ class KeyboadBuilder:
         return [[self.texts[lang]["keyboards"]["cancel"]]] + [[(datetime.now(pytz.timezone('Europe/Rome')) + timedelta(days=x)).strftime("%d/%m/%Y") if x > 1 else (self.texts[lang]["keyboards"]["today"] if x == 0 else self.texts[lang]["keyboards"]["tomorrow"])] for x in range(7)]
         
     def start_time_keyboard(self ,lang):
-        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[x] for x in range(MIN_TIME,MAX_TIME)]
+        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[str(x)] for x in range(MIN_TIME,MAX_TIME)]
 
     def end_time_keyboard(self, lang , start_time ):
-        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[x] for x in range(start_time + 1 , MAX_TIME + 1)]
+        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[str(x)] for x in range(start_time + 1 , MAX_TIME + 1)]
 
     def preference_keyboard(self,lang):
         return [[self.texts[lang]["keyboards"]["cancel"]] , [self.texts[lang]["keyboards"]["language"]] , [self.texts[lang]["keyboards"]["campus"]] , [self.texts[lang]["keyboards"]["time"]]]
@@ -35,6 +35,6 @@ class KeyboadBuilder:
         return [[self.texts[lang]["keyboards"]["cancel"]]] +[[l] for l in self.texts]
 
     def time_keyboard(self, lang):
-        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[x] for x in range(1 , 9)]
+        return [[self.texts[lang]["keyboards"]["cancel"]]] + [[str(x)] for x in range(1 , 9)]
 
 

@@ -7,13 +7,15 @@ import logging
 from os.path import join , dirname
 from dotenv import load_dotenv
 import telegram
-from telegram.message import Message
 from search.free_classroom import find_free_room
 from search.find_classrooms import TIME_SHIFT , MAX_TIME , MIN_TIME
-from telegram import  Update , ReplyKeyboardMarkup ,ReplyKeyboardRemove  
-from telegram.ext import (PicklePersistence,Updater,CommandHandler,ConversationHandler,CallbackContext,MessageHandler , Filters , CallbackQueryHandler)
-from datetime import datetime , timedelta
-from telegram import ParseMode
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram.constants import ParseMode, ChatAction
+from telegram.ext import (
+    PicklePersistence, Application, CommandHandler, ConversationHandler,
+    CallbackContext, MessageHandler, filters
+)
+from datetime import datetime, timedelta
 from functions import errorhandler , string_builder , input_check , keyboard_builder , user_data_handler ,regex_builder
 
 
@@ -90,16 +92,16 @@ The Functions below are used for the various commands in the states, first three
 referred to the initial state, second three are referred to the settings state
 """
 
-def search(update: Update , context : CallbackContext , lang) -> int:
+async def search(update: Update , context : CallbackContext , lang) -> int:
     """
     Send the keyboard for the location and return to set_location state ,
     this function is the initial state for the searching process
     """
-    update.message.reply_text(texts[lang]["texts"]['location'] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang),one_time_keyboard=True))
+    await update.message.reply_text(texts[lang]["texts"]['location'] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang),one_time_keyboard=True))
     return SET_LOCATION
 
 
-def now(update: Update , context : CallbackContext, lang) -> int:
+async def now(update: Update , context : CallbackContext, lang) -> int:
     """
     Thhis functions implements the quick search, after checking if the campus is in
     the preferences of the user call the end_state function, otherwise return to the initial_state
@@ -109,12 +111,12 @@ def now(update: Update , context : CallbackContext, lang) -> int:
     loc, dur = user_data_handler.get_user_preferences(context)
 
     if loc is None:
-        update.message.reply_text(texts[lang]["texts"]["missing"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.initial_keyboard(lang)))
+        await update.message.reply_text(texts[lang]["texts"]["missing"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.initial_keyboard(lang)))
         return INITIAL_STATE
     
     start_time = int(datetime.now(pytz.timezone('Europe/Rome')).strftime('%H'))
     if start_time >= MAX_TIME or start_time < MIN_TIME:
-        update.message.reply_text(texts[lang]["texts"]['ops'])
+        await update.message.reply_text(texts[lang]["texts"]['ops'])
         start_time = MIN_TIME
     end_time = start_time + dur if start_time + dur < MAX_TIME else MAX_TIME
 
@@ -122,37 +124,37 @@ def now(update: Update , context : CallbackContext, lang) -> int:
     context.user_data["date"] = datetime.now(pytz.timezone('Europe/Rome')).strftime("%d/%m/%Y")
     context.user_data["start_time"] = start_time
     update.message.text = end_time
-    return end_state(update, context)
+    return await end_state(update, context)
 
 
-def preferences(update: Update , context : CallbackContext, lang) -> int:
+async def preferences(update: Update , context : CallbackContext, lang) -> int:
     """
     Send the keyboard for the preferences state and return to setting state
     """
-    update.message.reply_text(texts[lang]["texts"]["settings"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["settings"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
     return SETTINGS
 
-def language(update: Update , context : CallbackContext, lang) -> int:
+async def language(update: Update , context : CallbackContext, lang) -> int:
     """
     Send the keyboard for the languages and return to set_lang state
     """
-    update.message.reply_text(texts[lang]["texts"]["language"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.language_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["language"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.language_keyboard(lang)))
     return SET_LANG
 
 
-def duration(update: Update , context : CallbackContext, lang) -> int:
+async def duration(update: Update , context : CallbackContext, lang) -> int:
     """
     Send the keyboard for the duration and return to set_time state
     """
-    update.message.reply_text(texts[lang]["texts"]["time"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.time_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["time"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.time_keyboard(lang)))
     return SET_TIME
 
 
-def campus(update: Update , context : CallbackContext, lang) -> int:
+async def campus(update: Update , context : CallbackContext, lang) -> int:
     """
     Send the keyboard for the campus and return to set_campus state
     """
-    update.message.reply_text(texts[lang]["texts"]["campus"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["campus"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang)))
     return SET_CAMPUS
 
 """
@@ -170,7 +172,7 @@ for key in command_keys:
 
 """STATES FUNCTIONS"""
 
-def start(update: Update , context: CallbackContext) ->int:
+async def start(update: Update , context: CallbackContext) ->int:
     """
     Start function for the conversation handler, initialize the dict of user_data
     in the context and return to the initial state
@@ -180,12 +182,12 @@ def start(update: Update , context: CallbackContext) ->int:
     initial_keyboard = KEYBOARDS.initial_keyboard(lang)
     logging.info("%s started conversation" , user.username)
 
-    update.message.reply_text(texts[lang]["texts"]['welcome'].format(user.username),disable_web_page_preview=True , parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
+    await update.message.reply_text(texts[lang]["texts"]['welcome'].format(user.username),disable_web_page_preview=True , parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
 
     return INITIAL_STATE
 
 
-def initial_state(update:Update , context: CallbackContext) ->int:
+async def initial_state(update:Update , context: CallbackContext) ->int:
     """
     Initial State of the ConversationHandler, through the function_map return to
     the right function based on the user input
@@ -195,11 +197,11 @@ def initial_state(update:Update , context: CallbackContext) ->int:
     lang = user_data_handler.get_lang(context)
     logging.info("%d : %s in  choose initial state" , user.id , user.username)
     
-    return function_map[message](update,context,lang)
+    return await function_map[message](update,context,lang)
 
 
 
-def settings(update: Update , context : CallbackContext):
+async def settings(update: Update , context : CallbackContext):
     """
     Settings state of the Conversation Handler, from here based on the user input
     calls the right function using the function_map 
@@ -209,9 +211,9 @@ def settings(update: Update , context : CallbackContext):
     logging.info("%d : %s in  settings" , user.id , user.username)
     lang = user_data_handler.get_lang(context)
     
-    return function_map[message](update,context,lang)
+    return await function_map[message](update,context,lang)
 
-def set_language(update: Update , context : CallbackContext):
+async def set_language(update: Update , context : CallbackContext):
     """
     In this state is stored in the user_data the preference for the language,
     if the input check goes well it returns to the settings, otherwise remain 
@@ -223,15 +225,15 @@ def set_language(update: Update , context : CallbackContext):
     logging.info("%d : %s in set language" ,user.id , user.username)
     
     if not input_check.language_check(message , texts):
-        errorhandler.bonk(update , texts , lang)
+        await errorhandler.bonk(update , texts , lang)
         return SET_LANG
     lang = message
     user_data_handler.update_lang(lang , context)
     
-    update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
     return SETTINGS
     
-def set_campus(update: Update , context: CallbackContext):
+async def set_campus(update: Update , context: CallbackContext):
     """
     In this state is stored in the user_data the preference for the campus,
     if the input check goes well it returns to the settings, otherwise remain
@@ -243,14 +245,14 @@ def set_campus(update: Update , context: CallbackContext):
     logging.info("%d : %s in set campus" ,user.id , user.username)
 
     if not input_check.location_check(message , location_dict):
-        errorhandler.bonk(update , texts , lang)
+        await errorhandler.bonk(update , texts , lang)
         return SET_CAMPUS
 
     user_data_handler.update_campus(message , context)
-    update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
     return SETTINGS
 
-def set_time(update: Update , context: CallbackContext):
+async def set_time(update: Update , context: CallbackContext):
     """
     In this state is stored in the user_data the preference for the duration
     in terms of hours for the quick search, if the input check goes well it 
@@ -262,15 +264,15 @@ def set_time(update: Update , context: CallbackContext):
     logging.info("%d : %s in set time" ,user.id ,  user.username)
     
     if not input_check.time_check(message):
-        errorhandler.bonk(update , texts , lang)
+        await errorhandler.bonk(update , texts , lang)
         return SET_TIME
 
     user_data_handler.update_time(message , context)
-    update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
+    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
     return SETTINGS
 
 
-def set_location_state(update: Update , context: CallbackContext) ->int:
+async def set_location_state(update: Update , context: CallbackContext) ->int:
     """
     In this state is saved in the user_data the location for the search process,
     if the input check goes well it returns to the set_day, otherwise remain in the same state
@@ -281,18 +283,18 @@ def set_location_state(update: Update , context: CallbackContext) ->int:
     logging.info("%d : %s in  set location state" ,user.id , user.username)
 
     if not input_check.location_check(message,location_dict):
-        errorhandler.bonk(update ,texts , lang )
+        await errorhandler.bonk(update ,texts , lang )
         return SET_LOCATION
     
     context.user_data["location"] = message
 
-    update.message.reply_text(texts[lang]["texts"]['day'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.day_keyboard(lang) , one_time_keyboard=True) )
+    await update.message.reply_text(texts[lang]["texts"]['day'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.day_keyboard(lang) , one_time_keyboard=True) )
 
     return SET_DAY
 
 
 
-def set_day_state(update: Update , context: CallbackContext) ->int:
+async def set_day_state(update: Update , context: CallbackContext) ->int:
     """
     In this state is saved in the user_data the chosen day for the search process,
     if the input check goes well it returns to the set_start_time, otherwise remain in the same state
@@ -304,17 +306,17 @@ def set_day_state(update: Update , context: CallbackContext) ->int:
     
     ret , chosen_date = input_check.day_check(message ,texts , lang)
     if not ret:
-        errorhandler.bonk(update , texts , lang)
+        await errorhandler.bonk(update , texts , lang)
         return SET_DAY
 
     context.user_data['date'] = chosen_date
-    update.message.reply_text(texts[lang]["texts"]['starting_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.start_time_keyboard(lang) , one_time_keyboard=True) )
+    await update.message.reply_text(texts[lang]["texts"]['starting_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.start_time_keyboard(lang) , one_time_keyboard=True) )
     
     return SET_START_TIME
 
 
 
-def set_start_time_state(update: Update , context: CallbackContext) ->int:
+async def set_start_time_state(update: Update , context: CallbackContext) ->int:
     """
     In this state is saved in the user_data the starting time of the search process,
     if the input check goes well it returns to the end_state, otherwise remain in the same state
@@ -326,16 +328,16 @@ def set_start_time_state(update: Update , context: CallbackContext) ->int:
     ret,start_time = input_check.start_time_check(message)
     
     if not ret:
-        errorhandler.bonk(update , texts , lang )
+        await errorhandler.bonk(update , texts , lang )
         return SET_START_TIME
 
     context.user_data['start_time'] = start_time
-    update.message.reply_text(texts[lang]["texts"]['ending_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.end_time_keyboard(lang ,start_time ) , one_time_keyboard=True) )
+    await update.message.reply_text(texts[lang]["texts"]['ending_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.end_time_keyboard(lang ,start_time ) , one_time_keyboard=True) )
 
     return SET_END_AND_SEND
 
 
-def end_state(update: Update , context: CallbackContext) ->int:
+async def end_state(update: Update , context: CallbackContext) ->int:
     """
     Final state of the search process, check if the last input is valid and 
     proceed to return to the user all the free classrooms, otherwise remains
@@ -352,7 +354,7 @@ def end_state(update: Update , context: CallbackContext) ->int:
     ret ,end_time = input_check.end_time_check(message ,start_time)
 
     if not ret:
-        errorhandler.bonk(update , texts , lang )
+        await errorhandler.bonk(update , texts , lang )
         return SET_END_AND_SEND
 
     logging.info("%d : %s in the set end time state and search" ,user.id , user.username)
@@ -360,15 +362,15 @@ def end_state(update: Update , context: CallbackContext) ->int:
     day , month , year = date.split('/')
     try:
         available_rooms = find_free_room(float(start_time + TIME_SHIFT) , float(end_time + TIME_SHIFT) , location_dict[location],int(day) , int(month) , int(year))  
-        update.message.reply_text('{}   {}   {}-{}'.format(date , location , start_time ,end_time))
+        await update.message.reply_text('{}   {}   {}-{}'.format(date , location , start_time ,end_time))
         for m in string_builder.room_builder_str(available_rooms , texts[lang]["texts"]["until"]):
-            update.message.reply_chat_action(telegram.ChatAction.TYPING)
-            update.message.reply_text(m,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
+            await update.message.reply_chat_action(ChatAction.TYPING)
+            await update.message.reply_text(m,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
         
         logging.info("%d : %s search was: %s %s %d %d" , user.id , user.username , location , date , start_time , end_time )
     except Exception as e:
         logging.info("Exception occurred during find_free_room, search was: %s  %s  %d-%d " , date , location , start_time , end_time)
-        update.message.reply_text(texts[lang]["texts"]["exception"] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard) ,disable_web_page_preview=True)
+        await update.message.reply_text(texts[lang]["texts"]["exception"] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard) ,disable_web_page_preview=True)
     
     
     user_data_handler.reset_user_data(context)
@@ -379,7 +381,7 @@ def end_state(update: Update , context: CallbackContext) ->int:
 
 """FALLBACKS"""
 
-def terminate(update: Update, context: CallbackContext) -> int:
+async def terminate(update: Update, context: CallbackContext) -> int:
     """
     This function terminate the Conversation handler
     """
@@ -388,13 +390,13 @@ def terminate(update: Update, context: CallbackContext) -> int:
     context.user_data.clear()
 
     logging.info("%d : %s terminated the conversation.", user.id , user.username)
-    update.message.reply_text(texts[lang]["texts"]['terminate'], reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(texts[lang]["texts"]['terminate'], reply_markup=ReplyKeyboardRemove())
 
     return ConversationHandler.END
 
 
 
-def info(update: Update, context: CallbackContext):
+async def info(update: Update, context: CallbackContext):
     """
     Return some info to the user
     """
@@ -402,10 +404,10 @@ def info(update: Update, context: CallbackContext):
     lang = user_data_handler.get_lang(context)
     initial_keyboard = KEYBOARDS.initial_keyboard(lang)
     logging.info("%d : %s asked for more info.", user.id , user.username)
-    update.message.reply_text(texts[lang]["texts"]['info'],parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
+    await update.message.reply_text(texts[lang]["texts"]['info'],parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
     return
 
-def cancel(update: Update, context: CallbackContext):
+async def cancel(update: Update, context: CallbackContext):
     """
     Stop any process and return to the initial state
     """
@@ -414,7 +416,7 @@ def cancel(update: Update, context: CallbackContext):
     initial_keyboard = KEYBOARDS.initial_keyboard(lang)
     user_data_handler.reset_user_data(context)
     logging.info("%d : %s canceled.", user.id , user.username)
-    update.message.reply_text(texts[lang]["texts"]['cancel'] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
+    await update.message.reply_text(texts[lang]["texts"]['cancel'] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
     return INITIAL_STATE
 
 
@@ -424,37 +426,44 @@ def cancel(update: Update, context: CallbackContext):
 
 def main():
     #add persistence for states
-    pp = PicklePersistence(filename='aulelibere_pp')
-    
+    pp = PicklePersistence(filepath='aulelibere_pp')
+
     regex = regex_builder.RegexBuilder(texts)
 
-    updater = Updater(token=TOKEN , use_context=True , persistence=pp)
-    dispatcher = updater.dispatcher
+    application = (
+        Application.builder()
+        .token(TOKEN)
+        .persistence(pp)
+        .build()
+    )
 
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start',start)],
+        entry_points=[CommandHandler('start', start)],
         states={
-            INITIAL_STATE : [MessageHandler(Filters.regex(regex.initial_state()),initial_state)],
-            SET_LOCATION : [MessageHandler(Filters.text & ~Filters.command,set_location_state)],
-            SET_DAY : [MessageHandler(Filters.regex(regex.date_regex()) | Filters.regex(regex.date_string_regex()), set_day_state )],
-            SET_START_TIME : [MessageHandler(Filters.text & ~Filters.command,set_start_time_state)],
-            SET_END_AND_SEND : [MessageHandler(Filters.text & ~Filters.command, end_state)],
-            SETTINGS : [MessageHandler(Filters.regex(regex.settings_regex()) , settings)],
-            SET_LANG : [MessageHandler(Filters.text & ~Filters.command , set_language)],
-            SET_CAMPUS: [MessageHandler(Filters.text & ~Filters.command , set_campus)],
-            SET_TIME: [MessageHandler(Filters.text & ~Filters.command , set_time)]
-            },
-        fallbacks=[CommandHandler('terminate' , terminate)  , MessageHandler(Filters.regex(regex.info_regex()) , info), MessageHandler(Filters.regex(regex.cancel_command()), cancel)],
-    
-    persistent=True,name='search_room_c_handler',allow_reentry=True)
+            INITIAL_STATE: [MessageHandler(filters.Regex(regex.initial_state()), initial_state)],
+            SET_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_location_state)],
+            SET_DAY: [MessageHandler(filters.Regex(regex.date_regex()) | filters.Regex(regex.date_string_regex()), set_day_state)],
+            SET_START_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_start_time_state)],
+            SET_END_AND_SEND: [MessageHandler(filters.TEXT & ~filters.COMMAND, end_state)],
+            SETTINGS: [MessageHandler(filters.Regex(regex.settings_regex()), settings)],
+            SET_LANG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
+            SET_CAMPUS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_campus)],
+            SET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
+        },
+        fallbacks=[
+            CommandHandler('terminate', terminate),
+            MessageHandler(filters.Regex(regex.info_regex()), info),
+            MessageHandler(filters.Regex(regex.cancel_command()), cancel),
+        ],
+        name='search_room_c_handler',
+        persistent=True,
+        allow_reentry=True,
+    )
 
-    dispatcher.add_error_handler(errorhandler.error_handler)
-    dispatcher.add_handler(conv_handler)
+    application.add_error_handler(errorhandler.error_handler)
+    application.add_handler(conv_handler)
 
-    updater.start_polling()
-
-    updater.idle()
+    application.run_polling()
 
 if __name__ == '__main__':
     main()
-

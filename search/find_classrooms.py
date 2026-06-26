@@ -3,8 +3,8 @@ import requests
 from bs4 import BeautifulSoup
 import json
 
-URL = "https://www7.ceda.polimi.it/spazi/spazi/controller/OccupazioniGiornoEsatto.do"
-BASE_URL = "https://www7.ceda.polimi.it/spazi/spazi/controller/"
+URL = "https://onlineservices.polimi.it/spazi/spazi/controller/OccupazioniGiornoEsatto.do"
+BASE_URL = "https://onlineservices.polimi.it/spazi/spazi/controller/"
 BUILDING = 'innerEdificio'
 ROOM = 'dove'
 LECTURE = 'slot'
@@ -43,6 +43,8 @@ def find_classrooms(location , day , month , year):
     
     soup = BeautifulSoup(r.text, 'html.parser')
     tableContainer = soup.find("div", {"id": "tableContainer"})
+    if tableContainer is None:
+        return info  # no data for this location/date
     tableRows = tableContainer.find_all('tr')[3:] #remove first three headers
 
     with open("json/roomsWithPower.json","r") as j:
@@ -65,8 +67,11 @@ def find_classrooms(location , day , month , year):
             time = 7.75
             for td in tds:
                 if ROOM in td.attrs['class']:
-                    room = td.find('a').string.replace(" ","")
-                    link = td.find('a')['href']
+                    a_tag = td.find('a')
+                    if a_tag is None:
+                        continue
+                    room = a_tag.string.replace(" ","")
+                    link = a_tag['href']
                     id_aula = int(link.split("=")[-1])
                     
                     if room not in info[buildingName]:
@@ -77,7 +82,7 @@ def find_classrooms(location , day , month , year):
 
                 elif LECTURE in td.attrs['class'] and room != '':
                     duration = int(td.attrs['colspan'])
-                    lesson_name = td.find('a').string
+                    lesson_name = td.find('a').string if td.find('a') else "Occupata"
                     lesson = {}
                     lesson['name'] = lesson_name
                     lesson['from'] = time

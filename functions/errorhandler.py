@@ -4,11 +4,12 @@ import logging
 import traceback
 import os
 from os.path import join, dirname
-from telegram import Update, ParseMode
-from telegram.ext import Updater, CallbackContext, CommandHandler
+from telegram import Update
+from telegram.constants import ParseMode
+from telegram.ext import CallbackContext
 
 
-def error_handler(update: object, context: CallbackContext) -> None:
+async def error_handler(update: object, context: CallbackContext) -> None:
     """
     error handler function for the bot, notify the developer of any issue and
     send to him the stackstrace of the exception that occurred
@@ -31,15 +32,15 @@ def error_handler(update: object, context: CallbackContext) -> None:
     )
 
     # Finally, send the message
-    context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML)
+    if DEVELOPER_CHAT_ID:
+        await context.bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=message, parse_mode=ParseMode.HTML)
 
 # Helper functions for error messages and string builder
 
-def bonk(update : Update , texts , lang):
+async def bonk(update : Update , texts , lang):
     """
     function used to notify the users that they used a wrong input
     i.e. they didn't use the custom keyboards
     """
-    update.message.reply_text(texts[lang]["texts"]['error']) 
-    update.message.reply_photo(photo = open(join(dirname(__name__), 'photos/bonk.jpg'),'rb'))    
-
+    await update.message.reply_text(texts[lang]["texts"]['error']) 
+    await update.message.reply_photo(photo = open(join(dirname(__name__), 'photos/bonk.jpg'),'rb'))

@@ -1,4 +1,6 @@
-from telegram.constants import MAX_MESSAGE_LENGTH
+from telegram.constants import MessageLimit
+
+MAX_MESSAGE_LENGTH = MessageLimit.MAX_TEXT_LENGTH
 
 
 def room_builder_str(available_rooms , until):
