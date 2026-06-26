@@ -50,7 +50,7 @@ jobs:
         run: npm install -D wrangler@latest
 
       - name: Deploy to Cloudflare Pages
-        run: npx wrangler pages deploy . --project-name aule-libere-polimi-settings
+        run: npx wrangler pages deploy . --project-name aule-libere-polimi-settings --branch production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: dd78de33797f1a88dfa3de4ebca2a711
