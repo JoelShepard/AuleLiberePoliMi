@@ -1,0 +1,6 @@
+# Cloudflare Pages config for AuleLiberePoliMi settings Mini App
+name = "aule-libere-polimi-settings"
+
+pages_build_output_dir = "."
+
+[env.main]

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AuleLiberePoliMi — Settings</title>
+    <!-- Telegram Mini App CDN (required) -->
+    <script src="https://telegram.org/js/telegram-web-app.js?62"></script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Preferences</h1>
+        <p class="subtitle">Set your preferences for quick search</p>
+
+        <div class="form-group">
+            <label for="lang">🌐 Language / Lingua</label>
+            <select id="lang">
+                <option value="en">🇬🇧 English</option>
+                <option value="it">🇮🇹 Italiano</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="campus">🏫 Preferred Campus</label>
+            <select id="campus">
+                <option value="">— Select a campus —</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="duration">⏱ Search Duration (hours)</label>
+            <div class="duration-row">
+                <input type="range" id="duration" min="1" max="8" value="2" />
+                <span id="duration-value">2h</span>
+            </div>
+        </div>
+
+        <button id="save-btn" class="btn-save">💾 Save Preferences</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

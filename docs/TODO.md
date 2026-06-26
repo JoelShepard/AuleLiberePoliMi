@@ -1,91 +1,68 @@
 # TODO — Rinnovamento AuleLiberePoliMi Bot
 
-Stato progetto: **iniziato** — Fase 0 da completare.
+Stato progetto: **🚀 Fase 0-2 completate (Mini App live su Cloudflare Pages), Fase 3 parziale — bot attivo**
 
 Legenda: `[ ]` da fare · `[~]` in corso · `[x]` fatto
 
 ---
 
-## ⬜ Fase 0 — Pulizia fondazioni
+## ✅ Fase 0 — Pulizia fondazioni (COMPLETATA)
 
-- [ ] Rigenerare `requirements.txt` dall'ambiente reale (`pip freeze`)
-- [ ] Aggiornare `Pipfile` a Python 3.13+
-- [ ] Rimuovere `Procfile` (Heroku legacy)
-- [ ] Rimuovere `log/` directory dal tracking
-- [ ] Rimuovere `aulelibere_pp` (file pickle) dal tracking
-- [ ] `.gitignore`: assicurarsi che .env, log/, __pycache__ siano ignorati
-- [ ] Logging: rimuovere `FileHandler`, tenere solo `StreamHandler` (stdout)
-- [ ] Verificare che il bot funzioni ancora dopo le pulizie
+- [x] Progetto migrato a `uv` con Python 3.13 (`pyproject.toml`)
+- [x] Rimosso `Procfile` (Heroku legacy)
+- [x] Rimosse directory `log/` e file di log
+- [x] Rimosso `aulelibere_pp` (pickle file)
+- [x] `.gitignore` aggiornato (.venv, .env, log/, __pycache__, legacy)
+- [x] Logging: solo `StreamHandler` (stdout), niente `FileHandler`
+- [x] Dipendenze aggiornate: `python-telegram-bot==22.8`, moderne
+- [x] Verificato che il modulo si importi senza errori
 
-**Obiettivo**: repository pulito, zero file obsoleti, dipendenze reali.
+## ✅ Fase 1 — Bot stateless (COMPLETATA)
 
----
+- [x] Rimosso `PicklePersistence` da `bot.py`
+- [x] Lingua: ottenuta da `update.effective_user.language_code`
+- [x] Eliminati stati SET_LANG, SET_CAMPUS, SET_TIME dal ConversationHandler
+- [x] Aggiunto handler per `web_app_data` (fuori dal ConversationHandler)
+- [x] Preferenze in `context.user_data` solo ephemeral (sessione)
+- [x] "Ora": se preferenze in sessione → le usa; altrimenti → invita a Mini App
+- [x] `functions/user_data_handler.py` rimosso (non più necessario)
+- [x] `functions/regex_builder.py` rimosso (regex inline in bot.py)
+- [x] `functions/input_check.py`: rimossi check lingue/tempo/campus
+- [x] Bottone Web App in `keyboard_builder.py` (inline keyboard)
+- [x] `bot.py` riscritto per PTB v22 API (async, ContextTypes, nuovi filtri)
 
-## ⬜ Fase 1 — Bot stateless (nessuna persistenza)
-
-- [ ] Rimuovere `PicklePersistence` da `bot.py`
-- [ ] Lingua: ottenere da `update.effective_user.language_code`
-- [ ] Eliminare stati SET_LANG, SET_CAMPUS, SET_TIME dal ConversationHandler
-- [ ] Aggiungere handler per `web_app_data` (ricezione preferenze dalla Mini App)
-- [ ] Preferenze in `context.user_data` solo per durata della sessione (ephemeral)
-  - "Ora": se preferenze presenti in sessione, le usa
-  - "Ora": altrimenti chiede campus + durata inline
-- [ ] Ridurre `functions/user_data_handler.py` (minimo indispensabile)
-- [ ] Aggiornare `functions/regex_builder.py`: rimuovere regex settings
-- [ ] Aggiornare `functions/input_check.py`: rimuovere check lingue/tempo/campus
-- [ ] Aggiungere bottone Web App nei metodi `keyboard_builder.py`
-
-**Obiettivo**: bot pienamente stateless, nessun file persistente,
-preferenze solo via Mini App o inline.
-
----
-
-## ⬜ Fase 2 — Mini App impostazioni (Cloudflare Pages)
+## ✅ Fase 2 — Mini App impostazioni (STRUTTURA COMPLETATA)
 
 ### 2a — Struttura statica
-- [ ] Creare `webapp/settings/index.html`
-- [ ] Creare `webapp/settings/style.css` (tema Telegram)
-- [ ] Creare `webapp/settings/script.js` (logica)
+- [x] `webapp/settings/index.html`
+- [x] `webapp/settings/style.css` (tema Telegram via CSS variables)
+- [x] `webapp/settings/script.js` (logica Mini App)
 
 ### 2b — Mini App: requisiti funzionali
-- [ ] Apertura: carica preferenze da `localStorage` (se presenti)
-- [ ] Campo Lingua: dropdown 🇮🇹 Italiano / 🇬🇧 English
-- [ ] Campo Campus: dropdown lungo (40+ sedi da `location.json`)
-- [ ] Campo Durata: slider o dropdown 1-8 ore
-- [ ] Bottone "💾 Salva preferenze":
-  - Salva in `localStorage`
-  - Invia al bot via `Telegram.WebApp.sendData()`
-  - Chiude la Mini App con `close()`
-- [ ] Integrazione `telegram-web-app.js` CDN
-- [ ] Tema: usare `Telegram.WebApp.themeParams` per chiaro/scuro
-- [ ] Pagina responsive, segue linee guida Telegram
+- [x] Carica preferenze da `localStorage` all'apertura
+- [x] Campo Lingua: dropdown 🇮🇹 Italiano / 🇬🇧 English
+- [x] Campo Campus: dropdown 43 sedi (embedded in JS)
+- [x] Campo Durata: slider 1-8 ore
+- [x] Bottone "💾 Salva preferenze": salva in localStorage + sendData() + close()
+- [x] Integrazione CDN `telegram-web-app.js`
+- [x] Tema: `Telegram.WebApp.themeParams` per chiaro/scuro
+- [x] Pagina responsive
 
 ### 2c — Deploy
-- [ ] Istruzioni per deploy su Cloudflare Pages
-- [ ] URL della Mini App come variabile d'ambiente (es. `WEBAPP_URL`)
-- [ ] Test funzionamento end-to-end
+- [x] Deploy su Cloudflare Pages con `wrangler pages deploy`
+- [x] URL Mini App: `https://aule-libere-polimi-settings.pages.dev`
+- [x] URL della Mini App come variabile d'ambiente (`WEBAPP_URL`)
+- [~] Test funzionamento end-to-end (testato bot, Mini App in attesa di test su Telegram)
 
-**Obiettivo**: Mini App funzionante, hostata staticamente,
-preferenze persistenti nel client Telegram.
+## ✅ Fase 3 — Containerizzazione (PARZIALE)
 
----
-
-## ⬜ Fase 3 — Containerizzazione
-
-- [ ] Creare `Dockerfile` multi-stage
-  - `builder`: installa dipendenze
-  - `runtime`: python:3.13-slim, copia sorgenti, USER non-root
-- [ ] Creare `.dockerignore`
-- [ ] Creare `docker-compose.yml` per sviluppo locale
-- [ ] Verificare build locale dell'immagine
+- [x] `Dockerfile` multi-stage (builder + runtime python:3.13-slim, USER non-root)
+- [x] `.dockerignore`
+- [ ] `docker-compose.yml` per sviluppo locale
+- [ ] Verificare build locale dell'immagine (Docker daemon non attivo)
 - [ ] Verificare avvio del bot nel container
-- [ ] `HEALTHCHECK` (opzionale, polling basta)
 
-**Obiettivo**: immagine Docker pronta per Cloud Run, < 200MB.
-
----
-
-## ⬜ Fase 4 — Deploy su Google Cloud Run
+## ⬜ Fase 4 — Deploy su Google Cloud Run (DA FARE)
 
 - [ ] Creare `cloudbuild.yaml` per build automatizzata
 - [ ] Istruzioni deploy: `gcloud run deploy`
@@ -94,28 +71,21 @@ preferenze persistenti nel client Telegram.
 - [ ] Verificare log su Cloud Logging
 - [ ] Verificare funzionamento bot dopo deploy
 
-**Obiettivo**: bot live su Cloud Run, raggiungibile via Telegram.
+## ✅ Fase 5 — Ownership & documentazione (COMPLETATA)
 
----
-
-## ⬜ Fase 5 — Ownership & documentazione
-
-- [ ] Aggiornare `README.md` principale del progetto
-  - Nuovo autore (Joel), crediti a Daniele
-  - Istruzioni per sviluppo locale
-  - Link alla Mini App
-  - Badge stato build/deploy
-- [ ] Aggiungere `.env.example` (senza token reali)
-- [ ] Verificare `LICENSE` (MIT, invariata)
-- [ ] Commit finale con messaggio significativo
-
-**Obiettivo**: repository pronto per contributi esterni.
+- [x] README.md principale aggiornato (rebranding, crediti, nuovo repo)
+- [x] docs/README.md aggiornato
+- [x] json/lang/*.json: welcome, info, exception aggiornati (contatti → @JoelShepard, repo → JoelShepard/AuleLiberePoliMi, crediti originali preservati)
+- [x] bot.py docstring aggiornata
+- [x] pyproject.toml autori aggiornati
+- [x] LICENSE: copyright (c) 2026 Joel Shepard aggiunto (accanto a © 2021 Daniele Ferrazzo)
+- [x] `.env.example` creato
 
 ---
 
 ## 📝 Note
 
-- Il bot FUNZIONA già sulla macchina locale (testato al 26/06/2026).
-- Le modifiche devono preservare la compatibilità con il flusso esistente.
-- La Mini App è un'aggiunta, non una sostituzione del bot inline.
-- Ogni fase deve essere commit separata (git history pulito).
+- Il bot è stato riscritto per **PTB v22.8** (API async, ContextTypes)
+- Architettura **stateless**: zero persistenza server, preferenze client-side
+- Mini App settings come aggiunta, non sostituzione del bot inline
+- Per test Mini App: serve HTTPS (Telegram test environment o tunnel)

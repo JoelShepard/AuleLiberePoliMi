@@ -1,0 +1,16 @@
+[project]
+name = "aule-libere-polimi"
+version = "2.1.0"
+description = "Telegram bot to find free classrooms at Politecnico di Milano"
+authors = [
+    {name = "Joel Shepard", email = "joel@joelshepard.com"},
+]
+requires-python = ">=3.13"
+dependencies = [
+    "python-telegram-bot>=22.8",
+    "python-dotenv>=1.0",
+    "pytz>=2024.0",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]

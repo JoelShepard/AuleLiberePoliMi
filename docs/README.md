@@ -81,8 +81,8 @@ AuleLiberePoliMi/
 │       ├── style.css             # Stile tema Telegram
 │       └── script.js             # Logica preferenze client-side
 ├── photos/
-├── AGENTS.md                   # Contesto per AI agent (root)
 │   └── bonk.jpg                  # Meme per input errati
+├── AGENTS.md                     # Contesto per AI agent (root)
 └── docs/
     ├── README.md                 # Questa documentazione
     └── TODO.md                   # Piano di rinnovamento
@@ -110,4 +110,4 @@ Le preferenze vivono solo nel client Telegram.
 ## Licenza
 
 MIT — originale di [Daniele Ferrazzo](https://github.com/feDann).
-Fork e rinnovamento a cura di Joel Shepard.
+Fork e rinnovamento a cura di [Joel Shepard](https://github.com/JoelShepard).

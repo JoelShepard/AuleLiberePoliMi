@@ -1,0 +1,55 @@
+# ── Deploy Mini App to Cloudflare Pages ──────────────────────────
+# Triggers on every push to main that touches webapp/settings/.
+# Also triggerable manually via GitHub UI (workflow_dispatch).
+#
+# Required GitHub secrets:
+#   CLOUDFLARE_API_TOKEN — API token with Cloudflare Pages:Write permission
+#
+# To create the token:
+#   1. Go to https://dash.cloudflare.com/profile/api-tokens
+#   2. "Create Token" → "Cloudflare Pages" template
+#   3. Set permissions: Account > Cloudflare Pages > Edit
+#   4. Copy the token and add it as a secret in your GitHub repo
+#      Settings → Secrets and variables → Actions → New repository secret
+#      Name: CLOUDFLARE_API_TOKEN
+
+name: Deploy Mini App (Cloudflare Pages)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "webapp/settings/**"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy"
+        required: false
+        default: "main"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp/settings
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Wrangler
+        run: npm install -D wrangler@latest
+
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy . --project-name aule-libere-polimi-settings
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

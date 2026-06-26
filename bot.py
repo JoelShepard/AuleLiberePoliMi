@@ -1,469 +1,563 @@
+#!/usr/bin/env python3
+"""
+AuleLiberePoliMi Bot — Telegram bot to find free classrooms at PoliMi.
+
+Rewrite for PTB v22+, stateless, with Mini App support.
+Original bot by Daniele Ferrazzo (2021). Adapted and maintained by Joel Shepard (2026).
+"""
 import os
-import time
-import sys
-import pytz
+import re
 import json
 import logging
-from os.path import join , dirname
+import pytz
+from os.path import join, dirname
 from dotenv import load_dotenv
-import telegram
-from search.free_classroom import find_free_room
-from search.find_classrooms import TIME_SHIFT , MAX_TIME , MIN_TIME
+from datetime import datetime
+
 from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.constants import ParseMode, ChatAction
 from telegram.ext import (
-    PicklePersistence, Application, CommandHandler, ConversationHandler,
-    CallbackContext, MessageHandler, filters
+    Application,
+    CommandHandler,
+    ConversationHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
 )
-from datetime import datetime, timedelta
-from functions import errorhandler , string_builder , input_check , keyboard_builder , user_data_handler ,regex_builder
 
+from search.free_classroom import find_free_room
+from search.find_classrooms import TIME_SHIFT, MAX_TIME, MIN_TIME
+from functions import errorhandler, string_builder, input_check, keyboard_builder
 
-LOGPATH = "log/"
+# ── Paths & environment ────────────────────────────────────────────
 DIRPATH = dirname(__file__)
+dotenv_path = join(DIRPATH, ".env")
+load_dotenv(dotenv_path)
 
-
-
-"""
-Create a dir for the logs file
-"""
-if not os.path.exists(LOGPATH):
-    os.mkdir(LOGPATH)
-
-"""
-Basic logger config
-"""
+# ── Logging: solo stdout ───────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("{0}{1}.log".format(LOGPATH, str(time.time()))),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=[logging.StreamHandler()],
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# ── Load static data (shipped in Docker image) ─────────────────────
+location_dict = {}
+with open(join(DIRPATH, "json", "location.json")) as f:
+    location_dict = json.load(f)
+
+texts = {}
+for lang_file in os.listdir(join(DIRPATH, "json", "lang")):
+    with open(join(DIRPATH, "json", "lang", lang_file)) as f:
+        texts[lang_file[:2]] = json.load(f)
+
+# ── Build cross-language command maps ──────────────────────────────
+# _label_to_handler: user-facing label → handler name (search/now/preferences/info)
+_label_to_handler: dict[str, str] = {}
+# _cancel_aliases: set of all cancel labels across languages
+_cancel_aliases: set[str] = set()
+# _today_aliases / _tomorrow_aliases: for date regex
+_today_aliases: set[str] = set()
+_tomorrow_aliases: set[str] = set()
+
+for lang in texts:
+    kb = texts[lang]["keyboards"]
+    _cancel_aliases.add(kb["cancel"])
+    _today_aliases.add(kb["today"])
+    _tomorrow_aliases.add(kb["tomorrow"])
+    for key in ("search", "now", "preferences", "info"):
+        if key not in _label_to_handler:
+            # First mapping: handler_name → list of labels
+            pass
+
+# Rebuild properly: map each label to its handler name
+# command_keys is a dict: logical_key → [list of translated labels]
+command_keys: dict[str, list[str]] = {}
+for lang in texts:
+    for key, label in texts[lang]["keyboards"].items():
+        if key not in ("cancel", "today", "tomorrow"):
+            command_keys.setdefault(key, []).append(label)
+
+for key, labels in command_keys.items():
+    # NOTE: "preferences" is NOT added to _label_to_handler
+    # because it's now a KeyboardButton with web_app type.
+    # Tapping it opens the Mini App directly — the bot never sees a text message.
+    # (If someone types the label manually, it won't match the regex.)
+    if key in ("search", "now", "info"):
+        for label in labels:
+            _label_to_handler[label] = key
+
+# ── Regex patterns ─────────────────────────────────────────────────
+# Cancel regex: matches any cancel alias
+_cancel_regex = "^(" + "|".join(re.escape(a) for a in _cancel_aliases) + ")$"
+
+# Initial state regex: matches search/now/preferences/info in any language
+_initial_regex = "^(" + "|".join(
+    re.escape(l) for l, h in _label_to_handler.items()
+) + ")$"
+
+# Date regex components
+_date_format_regex = r"^([0]?[1-9]|[1|2][0-9]|[3][0|1])[./-]([0]?[1-9]|[1][0-2])[./-]([0-9]{4}|[0-9]{2})$"
+_today_regex = "^(" + "|".join(re.escape(a) for a in _today_aliases) + ")$"
+_tomorrow_regex = "^(" + "|".join(re.escape(a) for a in _tomorrow_aliases) + ")$"
+# Combined: day accepts either date format OR today OR tomorrow
+_day_regex = f"({_date_format_regex})|({_today_regex})|({_tomorrow_regex})"
+
+# ── Bot config ────────────────────────────────────────────────────
+TOKEN = os.environ.get("TOKEN")
+WEBAPP_URL = os.environ.get(
+    "WEBAPP_URL", "https://aule-libere-polimi-settings.pages.dev"
 )
 
-dotenv_path = join(DIRPATH, '.env')
-load_dotenv(dotenv_path)
+# ── Keyboard builder ───────────────────────────────────────────────
+KEYBOARDS = keyboard_builder.KeyboadBuilder(texts, location_dict, WEBAPP_URL)
+
+# ── Conversation states ────────────────────────────────────────────
+(
+    INITIAL_STATE,
+    SET_LOCATION,
+    SET_DAY,
+    SET_START_TIME,
+    SET_END_AND_SEND,
+) = range(5)
 
 
+# ══════════════════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════════════════
+def get_lang(update: Update) -> str:
+    """Get user's Telegram language, falling back to 'en'."""
+    user = update.effective_user
+    if user and user.language_code and user.language_code in texts:
+        return user.language_code
+    return "en"
 
 
-"""
-Code below load all the query params for the campus in a dict
-"""
-location_dict = {}
-with open(join(DIRPATH, 'json/location.json')) as location_json:
-    location_dict = json.load(location_json)
-
-"""
-Code below load in a dict all the text messages in all the available languages
-"""
-texts = {}
-for lang in os.listdir(join(DIRPATH , 'json/lang')):
-    with open(join(DIRPATH,'json' , 'lang' , lang) , 'r') as f:
-        texts[lang[:2]] = json.load(f)
-
-"""
-The fragment of code below load in a dict all the aliases for the various commands
-eg for search: Search, Cerca ecc
-"""
-command_keys = {}
-for lang in texts:
-    for key in texts[lang]["keyboards"]:
-        if key not in command_keys:
-            command_keys[key] = []
-        command_keys[key].append(texts[lang]["keyboards"][key])
-
-KEYBOARDS = keyboard_builder.KeyboadBuilder(texts , location_dict)
-
-TOKEN = os.environ.get("TOKEN")
+def get_preferences(context: ContextTypes.DEFAULT_TYPE) -> dict:
+    """Get ephemeral Mini App preferences from session (empty dict if none)."""
+    return context.user_data.get("preferences", {})
 
 
-
-"""
-States for the conversation handler
-"""
-INITIAL_STATE, SET_LOCATION , SET_DAY , SET_START_TIME ,  SET_END_AND_SEND , SETTINGS , SET_LANG , SET_CAMPUS , SET_TIME , NOW= range(10)
-
-
-
-"""
-The Functions below are used for the various commands in the states, first three functions are
-referred to the initial state, second three are referred to the settings state
-"""
-
-async def search(update: Update , context : CallbackContext , lang) -> int:
+# ══════════════════════════════════════════════════════════════════
+#  WEB APP DATA HANDLER (outside ConversationHandler)
+# ══════════════════════════════════════════════════════════════════
+async def handle_web_app_data(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """
-    Send the keyboard for the location and return to set_location state ,
-    this function is the initial state for the searching process
+    Receive preferences from Telegram Mini App.
+    Stored ephemerally in context.user_data — lost on bot restart.
     """
-    await update.message.reply_text(texts[lang]["texts"]['location'] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang),one_time_keyboard=True))
-    return SET_LOCATION
+    web_app_data = update.effective_message.web_app_data
+    if not web_app_data:
+        return
+
+    try:
+        preferences = json.loads(web_app_data.data)
+        context.user_data["preferences"] = preferences
+        lang = preferences.get("lang", get_lang(update))
+        await update.message.reply_text(
+            texts[lang]["texts"].get("success", "✅ Preferences saved!")
+        )
+        logging.info(
+            "Preferences saved for %s: %s",
+            update.effective_user.username if update.effective_user else "unknown",
+            preferences,
+        )
+    except (json.JSONDecodeError, TypeError) as e:
+        lang = get_lang(update)
+        logging.warning("Invalid web_app_data: %s", e)
+        await update.message.reply_text("❌ Invalid data received.")
 
 
-async def now(update: Update , context : CallbackContext, lang) -> int:
-    """
-    Thhis functions implements the quick search, after checking if the campus is in
-    the preferences of the user call the end_state function, otherwise return to the initial_state
-    """
-    user = update.message.from_user
-    logging.info("%d : %s in now state" , user.id ,  user.username)
-    loc, dur = user_data_handler.get_user_preferences(context)
+# ══════════════════════════════════════════════════════════════════
+#  CONVERSATION HANDLERS
+# ══════════════════════════════════════════════════════════════════
 
-    if loc is None:
-        await update.message.reply_text(texts[lang]["texts"]["missing"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.initial_keyboard(lang)))
-        return INITIAL_STATE
-    
-    start_time = int(datetime.now(pytz.timezone('Europe/Rome')).strftime('%H'))
-    if start_time >= MAX_TIME or start_time < MIN_TIME:
-        await update.message.reply_text(texts[lang]["texts"]['ops'])
-        start_time = MIN_TIME
-    end_time = start_time + dur if start_time + dur < MAX_TIME else MAX_TIME
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Welcome message and main menu."""
+    lang = get_lang(update)
+    user = update.effective_user
+    keyboard = KEYBOARDS.initial_keyboard(lang)
 
-    context.user_data["location"] = loc   
-    context.user_data["date"] = datetime.now(pytz.timezone('Europe/Rome')).strftime("%d/%m/%Y")
-    context.user_data["start_time"] = start_time
-    update.message.text = end_time
-    return await end_state(update, context)
+    logging.info(
+        "%s (%d) started conversation",
+        user.username if user else "unknown",
+        user.id if user else 0,
+    )
 
-
-async def preferences(update: Update , context : CallbackContext, lang) -> int:
-    """
-    Send the keyboard for the preferences state and return to setting state
-    """
-    await update.message.reply_text(texts[lang]["texts"]["settings"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
-    return SETTINGS
-
-async def language(update: Update , context : CallbackContext, lang) -> int:
-    """
-    Send the keyboard for the languages and return to set_lang state
-    """
-    await update.message.reply_text(texts[lang]["texts"]["language"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.language_keyboard(lang)))
-    return SET_LANG
-
-
-async def duration(update: Update , context : CallbackContext, lang) -> int:
-    """
-    Send the keyboard for the duration and return to set_time state
-    """
-    await update.message.reply_text(texts[lang]["texts"]["time"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.time_keyboard(lang)))
-    return SET_TIME
-
-
-async def campus(update: Update , context : CallbackContext, lang) -> int:
-    """
-    Send the keyboard for the campus and return to set_campus state
-    """
-    await update.message.reply_text(texts[lang]["texts"]["campus"] , reply_markup=ReplyKeyboardMarkup(KEYBOARDS.location_keyboard(lang)))
-    return SET_CAMPUS
-
-"""
-Code below map in a dict all the aliases for a certain function,
-e.g. map all the aliases of search (search, cerca, ecc) to the search function
-"""
-function_map = {}
-function_mapping = {"search" : search , "now" : now , "preferences" : preferences , "language" : language , "time" : duration, "campus" : campus}
-for key in command_keys:
-    if key in function_mapping:
-        for alias in command_keys[key]:
-            function_map[alias] = function_mapping[key]
-
-
-
-"""STATES FUNCTIONS"""
-
-async def start(update: Update , context: CallbackContext) ->int:
-    """
-    Start function for the conversation handler, initialize the dict of user_data
-    in the context and return to the initial state
-    """
-    lang = user_data_handler.initialize_user_data(context)     
-    user = update.message.from_user
-    initial_keyboard = KEYBOARDS.initial_keyboard(lang)
-    logging.info("%s started conversation" , user.username)
-
-    await update.message.reply_text(texts[lang]["texts"]['welcome'].format(user.username),disable_web_page_preview=True , parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
-
+    await update.message.reply_text(
+        texts[lang]["texts"]["welcome"].format(
+            user.first_name if user else ""
+        ),
+        disable_web_page_preview=True,
+        parse_mode=ParseMode.HTML,
+        reply_markup=ReplyKeyboardMarkup(keyboard),
+    )
     return INITIAL_STATE
 
 
-async def initial_state(update:Update , context: CallbackContext) ->int:
-    """
-    Initial State of the ConversationHandler, through the function_map return to
-    the right function based on the user input
-    """
-    user = update.message.from_user
+async def initial_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Route user's main-menu choice to the right handler."""
     message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in  choose initial state" , user.id , user.username)
-    
-    return await function_map[message](update,context,lang)
+    lang = get_lang(update)
 
+    handler_name = _label_to_handler.get(message)
 
-
-async def settings(update: Update , context : CallbackContext):
-    """
-    Settings state of the Conversation Handler, from here based on the user input
-    calls the right function using the function_map 
-    """
-    user = update.message.from_user
-    message = update.message.text
-    logging.info("%d : %s in  settings" , user.id , user.username)
-    lang = user_data_handler.get_lang(context)
-    
-    return await function_map[message](update,context,lang)
-
-async def set_language(update: Update , context : CallbackContext):
-    """
-    In this state is stored in the user_data the preference for the language,
-    if the input check goes well it returns to the settings, otherwise remain 
-    in the same state
-    """
-    user = update.message.from_user
-    message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in set language" ,user.id , user.username)
-    
-    if not input_check.language_check(message , texts):
-        await errorhandler.bonk(update , texts , lang)
-        return SET_LANG
-    lang = message
-    user_data_handler.update_lang(lang , context)
-    
-    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
-    return SETTINGS
-    
-async def set_campus(update: Update , context: CallbackContext):
-    """
-    In this state is stored in the user_data the preference for the campus,
-    if the input check goes well it returns to the settings, otherwise remain
-    in the same state  
-    """
-    user = update.message.from_user
-    message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in set campus" ,user.id , user.username)
-
-    if not input_check.location_check(message , location_dict):
-        await errorhandler.bonk(update , texts , lang)
-        return SET_CAMPUS
-
-    user_data_handler.update_campus(message , context)
-    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
-    return SETTINGS
-
-async def set_time(update: Update , context: CallbackContext):
-    """
-    In this state is stored in the user_data the preference for the duration
-    in terms of hours for the quick search, if the input check goes well it 
-    returns to the settings, otherwise remain in the same state   
-    """
-    user = update.message.from_user
-    message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in set time" ,user.id ,  user.username)
-    
-    if not input_check.time_check(message):
-        await errorhandler.bonk(update , texts , lang)
-        return SET_TIME
-
-    user_data_handler.update_time(message , context)
-    await update.message.reply_text(texts[lang]["texts"]["success"],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.preference_keyboard(lang)))
-    return SETTINGS
-
-
-async def set_location_state(update: Update , context: CallbackContext) ->int:
-    """
-    In this state is saved in the user_data the location for the search process,
-    if the input check goes well it returns to the set_day, otherwise remain in the same state
-    """
-    user = update.message.from_user
-    message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in  set location state" ,user.id , user.username)
-
-    if not input_check.location_check(message,location_dict):
-        await errorhandler.bonk(update ,texts , lang )
+    if handler_name == "search":
+        await update.message.reply_text(
+            texts[lang]["texts"]["location"],
+            reply_markup=ReplyKeyboardMarkup(
+                KEYBOARDS.location_keyboard(lang), one_time_keyboard=True
+            ),
+        )
         return SET_LOCATION
-    
+
+    elif handler_name == "now":
+        return await _cmd_now(update, context, lang)
+
+    elif handler_name == "info":
+        user = update.effective_user
+        logging.info(
+            "%d : %s asked for info",
+            user.id if user else 0,
+            user.username if user else "unknown",
+        )
+        keyboard = KEYBOARDS.initial_keyboard(lang)
+        await update.message.reply_text(
+            texts[lang]["texts"]["info"],
+            parse_mode=ParseMode.HTML,
+            reply_markup=ReplyKeyboardMarkup(keyboard),
+        )
+        return INITIAL_STATE
+
+    # Shouldn't reach here if regex works, but just in case
+    await errorhandler.bonk(update, texts, lang)
+    return INITIAL_STATE
+
+
+async def _cmd_now(update: Update, context: ContextTypes.DEFAULT_TYPE, lang: str) -> int:
+    """
+    Quick search "Ora".
+    If Mini App preferences exist in session → use them.
+    Otherwise → ask user to set preferences via Mini App.
+    """
+    user = update.effective_user
+    logging.info(
+        "%d : %s in now",
+        user.id if user else 0,
+        user.username if user else "unknown",
+    )
+
+    prefs = get_preferences(context)
+    campus = prefs.get("campus")
+    duration = prefs.get("duration", 2)
+
+    if not campus:
+        # Show main keyboard — ⚙️Preferenze button is now a Web App button
+        keyboard = KEYBOARDS.initial_keyboard(lang)
+        await update.message.reply_text(
+            texts[lang]["texts"].get(
+                "missing",
+                "Set your preferences first via the ⚙️ button in the menu!",
+            ),
+            reply_markup=ReplyKeyboardMarkup(keyboard),
+        )
+        return INITIAL_STATE
+
+    # Do quick search
+    now = datetime.now(pytz.timezone("Europe/Rome"))
+    start_hour = int(now.strftime("%H"))
+
+    if start_hour >= MAX_TIME or start_hour < MIN_TIME:
+        await update.message.reply_text(texts[lang]["texts"]["ops"])
+        start_hour = MIN_TIME
+
+    end_hour = start_hour + duration
+    if end_hour > MAX_TIME:
+        end_hour = MAX_TIME
+
+    return await _perform_search(
+        update, context, lang, campus, now.strftime("%d/%m/%Y"), start_hour, end_hour
+    )
+
+
+# ── Search-flow state handlers ─────────────────────────────────────
+async def set_location_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Save chosen campus and ask for day."""
+    message = update.message.text
+    lang = get_lang(update)
+
+    if not input_check.location_check(message, location_dict):
+        await errorhandler.bonk(update, texts, lang)
+        return SET_LOCATION
+
     context.user_data["location"] = message
-
-    await update.message.reply_text(texts[lang]["texts"]['day'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.day_keyboard(lang) , one_time_keyboard=True) )
-
+    await update.message.reply_text(
+        texts[lang]["texts"]["day"],
+        reply_markup=ReplyKeyboardMarkup(
+            KEYBOARDS.day_keyboard(lang), one_time_keyboard=True
+        ),
+    )
     return SET_DAY
 
 
-
-async def set_day_state(update: Update , context: CallbackContext) ->int:
-    """
-    In this state is saved in the user_data the chosen day for the search process,
-    if the input check goes well it returns to the set_start_time, otherwise remain in the same state
-    """
-    user = update.message.from_user
+async def set_day_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Save chosen day and ask for start time."""
     message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in set day state" ,user.id , user.username)
-    
-    ret , chosen_date = input_check.day_check(message ,texts , lang)
-    if not ret:
-        await errorhandler.bonk(update , texts , lang)
+    lang = get_lang(update)
+
+    ok, chosen_date = input_check.day_check(message, texts, lang)
+    if not ok:
+        await errorhandler.bonk(update, texts, lang)
         return SET_DAY
 
-    context.user_data['date'] = chosen_date
-    await update.message.reply_text(texts[lang]["texts"]['starting_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.start_time_keyboard(lang) , one_time_keyboard=True) )
-    
+    context.user_data["date"] = chosen_date
+    await update.message.reply_text(
+        texts[lang]["texts"]["starting_time"],
+        reply_markup=ReplyKeyboardMarkup(
+            KEYBOARDS.start_time_keyboard(lang), one_time_keyboard=True
+        ),
+    )
     return SET_START_TIME
 
 
-
-async def set_start_time_state(update: Update , context: CallbackContext) ->int:
-    """
-    In this state is saved in the user_data the starting time of the search process,
-    if the input check goes well it returns to the end_state, otherwise remain in the same state
-    """
-    user = update.message.from_user
+async def set_start_time_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Save start time and ask for end time."""
     message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    logging.info("%d : %s in set start state" ,user.id , user.username)
-    ret,start_time = input_check.start_time_check(message)
-    
-    if not ret:
-        await errorhandler.bonk(update , texts , lang )
+    lang = get_lang(update)
+
+    ok, start_time = input_check.start_time_check(message)
+    if not ok:
+        await errorhandler.bonk(update, texts, lang)
         return SET_START_TIME
 
-    context.user_data['start_time'] = start_time
-    await update.message.reply_text(texts[lang]["texts"]['ending_time'],reply_markup=ReplyKeyboardMarkup(KEYBOARDS.end_time_keyboard(lang ,start_time ) , one_time_keyboard=True) )
-
+    context.user_data["start_time"] = start_time
+    await update.message.reply_text(
+        texts[lang]["texts"]["ending_time"],
+        reply_markup=ReplyKeyboardMarkup(
+            KEYBOARDS.end_time_keyboard(lang, start_time), one_time_keyboard=True
+        ),
+    )
     return SET_END_AND_SEND
 
 
-async def end_state(update: Update , context: CallbackContext) ->int:
-    """
-    Final state of the search process, check if the last input is valid and 
-    proceed to return to the user all the free classrooms, otherwise remains
-    in the same state
-    """
-    user = update.message.from_user
+async def end_state(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> int:
+    """Validate end time, execute search, show results."""
     message = update.message.text
-    lang = user_data_handler.get_lang(context)
-    initial_keyboard = KEYBOARDS.initial_keyboard(lang)
+    lang = get_lang(update)
 
-    start_time = context.user_data['start_time']
-    date = context.user_data['date']
-    location = context.user_data['location']
-    ret ,end_time = input_check.end_time_check(message ,start_time)
+    start_time = context.user_data.get("start_time")
+    date = context.user_data.get("date")
+    location = context.user_data.get("location")
 
-    if not ret:
-        await errorhandler.bonk(update , texts , lang )
+    ok, end_time = input_check.end_time_check(message, start_time)
+    if not ok:
+        await errorhandler.bonk(update, texts, lang)
         return SET_END_AND_SEND
 
-    logging.info("%d : %s in the set end time state and search" ,user.id , user.username)
-    
-    day , month , year = date.split('/')
+    return await _perform_search(
+        update, context, lang, location, date, start_time, end_time
+    )
+
+
+# ── Shared search executor ─────────────────────────────────────────
+async def _perform_search(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    lang: str,
+    location: str,
+    date: str,
+    start_time: int,
+    end_time: int,
+) -> int:
+    """Query PoliMi website and send formatted results to user."""
+    user = update.effective_user
+    keyboard = KEYBOARDS.initial_keyboard(lang)
+
+    logging.info(
+        "%d : %s search — %s %s %d-%d",
+        user.id if user else 0,
+        user.username if user else "unknown",
+        location,
+        date,
+        start_time,
+        end_time,
+    )
+
+    day, month, year = date.split("/")
+
     try:
-        available_rooms = find_free_room(float(start_time + TIME_SHIFT) , float(end_time + TIME_SHIFT) , location_dict[location],int(day) , int(month) , int(year))  
-        await update.message.reply_text('{}   {}   {}-{}'.format(date , location , start_time ,end_time))
-        for m in string_builder.room_builder_str(available_rooms , texts[lang]["texts"]["until"]):
+        available_rooms = find_free_room(
+            float(start_time + TIME_SHIFT),
+            float(end_time + TIME_SHIFT),
+            location_dict[location],
+            int(day),
+            int(month),
+            int(year),
+        )
+
+        await update.message.reply_text(
+            "{}  {}  {}-{}".format(date, location, start_time, end_time)
+        )
+
+        for msg in string_builder.room_builder_str(
+            available_rooms, texts[lang]["texts"]["until"]
+        ):
             await update.message.reply_chat_action(ChatAction.TYPING)
-            await update.message.reply_text(m,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
-        
-        logging.info("%d : %s search was: %s %s %d %d" , user.id , user.username , location , date , start_time , end_time )
+            await update.message.reply_text(
+                msg,
+                parse_mode=ParseMode.HTML,
+                reply_markup=ReplyKeyboardMarkup(keyboard),
+            )
+
     except Exception as e:
-        logging.info("Exception occurred during find_free_room, search was: %s  %s  %d-%d " , date , location , start_time , end_time)
-        await update.message.reply_text(texts[lang]["texts"]["exception"] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard) ,disable_web_page_preview=True)
-    
-    
-    user_data_handler.reset_user_data(context)
-    
+        logging.exception(
+            "Search exception: %s %s %d-%d", date, location, start_time, end_time
+        )
+        await update.message.reply_text(
+            texts[lang]["texts"]["exception"],
+            parse_mode=ParseMode.HTML,
+            reply_markup=ReplyKeyboardMarkup(keyboard),
+            disable_web_page_preview=True,
+        )
+
     return INITIAL_STATE
 
 
+# ── Fallbacks ──────────────────────────────────────────────────────
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel current operation and return to initial state."""
+    lang = get_lang(update)
+    keyboard = KEYBOARDS.initial_keyboard(lang)
+    logging.info(
+        "%s canceled operation",
+        update.effective_user.username if update.effective_user else "unknown",
+    )
+    await update.message.reply_text(
+        texts[lang]["texts"]["cancel"],
+        parse_mode=ParseMode.HTML,
+        reply_markup=ReplyKeyboardMarkup(keyboard),
+    )
+    return INITIAL_STATE
 
-"""FALLBACKS"""
 
-async def terminate(update: Update, context: CallbackContext) -> int:
-    """
-    This function terminate the Conversation handler
-    """
-    user = update.message.from_user
-    lang = user_data_handler.get_lang(context)
+async def terminate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """End the conversation entirely."""
+    lang = get_lang(update)
     context.user_data.clear()
-
-    logging.info("%d : %s terminated the conversation.", user.id , user.username)
-    await update.message.reply_text(texts[lang]["texts"]['terminate'], reply_markup=ReplyKeyboardRemove())
-
+    logging.info(
+        "%s terminated conversation",
+        update.effective_user.username if update.effective_user else "unknown",
+    )
+    await update.message.reply_text(
+        texts[lang]["texts"]["terminate"],
+        reply_markup=ReplyKeyboardRemove(),
+    )
     return ConversationHandler.END
 
 
-
-async def info(update: Update, context: CallbackContext):
+async def info_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Return some info to the user
+    Info handler reachable from any state (fallback).
+    Shows info and returns to the same state (or initial).
     """
-    user = update.message.from_user
-    lang = user_data_handler.get_lang(context)
-    initial_keyboard = KEYBOARDS.initial_keyboard(lang)
-    logging.info("%d : %s asked for more info.", user.id , user.username)
-    await update.message.reply_text(texts[lang]["texts"]['info'],parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
-    return
-
-async def cancel(update: Update, context: CallbackContext):
-    """
-    Stop any process and return to the initial state
-    """
-    user = update.message.from_user
-    lang = user_data_handler.get_lang(context)
-    initial_keyboard = KEYBOARDS.initial_keyboard(lang)
-    user_data_handler.reset_user_data(context)
-    logging.info("%d : %s canceled.", user.id , user.username)
-    await update.message.reply_text(texts[lang]["texts"]['cancel'] ,parse_mode=ParseMode.HTML , reply_markup=ReplyKeyboardMarkup(initial_keyboard))
+    lang = get_lang(update)
+    keyboard = KEYBOARDS.initial_keyboard(lang)
+    await update.message.reply_text(
+        texts[lang]["texts"]["info"],
+        parse_mode=ParseMode.HTML,
+        reply_markup=ReplyKeyboardMarkup(keyboard),
+    )
     return INITIAL_STATE
 
 
+# ══════════════════════════════════════════════════════════════════
+#  BOT INITIALISATION
+# ══════════════════════════════════════════════════════════════════
+def build_info_regex() -> str:
+    """Build regex matching 'info' in all languages."""
+    patterns = [re.escape(l) for l, h in _label_to_handler.items() if h == "info"]
+    if not patterns:
+        return r"^$"  # never match
+    return "^(" + "|".join(patterns) + ")$"
 
 
-"""BOT INITIALIZATION"""
+def main() -> None:
+    """Build, configure and start the bot."""
+    application = Application.builder().token(TOKEN).build()
 
-def main():
-    #add persistence for states
-    pp = PicklePersistence(filepath='aulelibere_pp')
-
-    regex = regex_builder.RegexBuilder(texts)
-
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .persistence(pp)
-        .build()
+    # ── 1. Web App data handler (before ConversationHandler) ────
+    application.add_handler(
+        MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data)
     )
 
+    # ── 2. Conversation handler ─────────────────────────────────
+    info_regex = build_info_regex()
+
     conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
+        entry_points=[CommandHandler("start", start)],
         states={
-            INITIAL_STATE: [MessageHandler(filters.Regex(regex.initial_state()), initial_state)],
-            SET_LOCATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_location_state)],
-            SET_DAY: [MessageHandler(filters.Regex(regex.date_regex()) | filters.Regex(regex.date_string_regex()), set_day_state)],
-            SET_START_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_start_time_state)],
-            SET_END_AND_SEND: [MessageHandler(filters.TEXT & ~filters.COMMAND, end_state)],
-            SETTINGS: [MessageHandler(filters.Regex(regex.settings_regex()), settings)],
-            SET_LANG: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_language)],
-            SET_CAMPUS: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_campus)],
-            SET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_time)],
+            INITIAL_STATE: [
+                MessageHandler(
+                    filters.Regex(_initial_regex),
+                    initial_state,
+                )
+            ],
+            SET_LOCATION: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    set_location_state,
+                )
+            ],
+            SET_DAY: [
+                MessageHandler(
+                    filters.Regex(_day_regex),
+                    set_day_state,
+                )
+            ],
+            SET_START_TIME: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    set_start_time_state,
+                )
+            ],
+            SET_END_AND_SEND: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    end_state,
+                )
+            ],
         },
         fallbacks=[
-            CommandHandler('terminate', terminate),
-            MessageHandler(filters.Regex(regex.info_regex()), info),
-            MessageHandler(filters.Regex(regex.cancel_command()), cancel),
+            CommandHandler("terminate", terminate),
+            CommandHandler("cancel", cancel),
+            # Text-based cancel (/Back, /Indietro, etc.)
+            MessageHandler(filters.Regex(_cancel_regex), cancel),
+            # Info from any state
+            MessageHandler(filters.Regex(info_regex), info_fallback),
         ],
-        name='search_room_c_handler',
-        persistent=True,
         allow_reentry=True,
     )
 
-    application.add_error_handler(errorhandler.error_handler)
     application.add_handler(conv_handler)
 
-    application.run_polling()
+    # ── 3. Error handler ────────────────────────────────────────
+    application.add_error_handler(errorhandler.error_handler)
 
-if __name__ == '__main__':
+    # ── Start polling ───────────────────────────────────────────
+    logging.info("Bot starting — polling mode")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
     main()
