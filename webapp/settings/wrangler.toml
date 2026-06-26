@@ -2,5 +2,3 @@
 name = "aule-libere-polimi-settings"
 
 pages_build_output_dir = "."
-
-[env.main]
