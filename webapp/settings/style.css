@@ -1,4 +1,56 @@
-/* ── Reset & base ──────────────────────────────────────────── */
+/* ════════════════════════════════════════════════════════════════
+ *  AuleLiberePoliMi — Settings Mini App
+ *  Minimal Material Design 3 styling.
+ *  Surfaces follow Telegram theme variables (--tg-theme-*) so the
+ *  Mini App adapts to the user's light/dark Telegram theme; hardcoded
+ *  fallbacks are Material 3 tokens.
+ * ════════════════════════════════════════════════════════════════ */
+
+/* ── Design tokens ─────────────────────────────────────────────── */
+:root {
+    /* Material 3 motion */
+    --md-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+    --md-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+    --md-duration-short: 200ms;
+    --md-duration-medium: 300ms;
+
+    /* Radii (Material 3 scale) */
+    --md-radius-xs: 4px;
+    --md-radius-sm: 8px;
+    --md-radius-md: 12px;
+    --md-radius-lg: 16px;
+    --md-radius-full: 999px;
+
+    /* Telegram-aware palette (with Material 3 fallbacks, light) */
+    --md-primary: color-mix(in srgb, var(--tg-theme-button-color, #005a92) 80%, #808080 20%);
+    --md-on-primary: var(--tg-theme-button-text-color, #ffffff);
+    --md-surface: var(--tg-theme-bg-color, #fefbff);
+    --md-surface-container: var(--tg-theme-secondary-bg-color, #f3edf6);
+    --md-on-surface: var(--tg-theme-text-color, #1d1b20);
+    --md-on-surface-variant: var(--tg-theme-hint-color, #49454f);
+    --md-outline: var(--tg-theme-hint-color, #79747e);
+    --md-outline-variant: var(--tg-theme-hint-color, #cac4d0);
+
+    /* Elevation (Material 3 level 1) */
+    --md-elevation-1: 0 1px 2px 0 rgba(0, 0, 0, 0.10),
+        0 1px 3px 1px rgba(0, 0, 0, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        /* Material 3 dark fallbacks (only used outside Telegram) */
+        --md-primary: color-mix(in srgb, var(--tg-theme-button-color, #4a90e2) 80%, #808080 20%);
+        --md-on-primary: var(--tg-theme-button-text-color, #00344d);
+        --md-surface: var(--tg-theme-bg-color, #141218);
+        --md-surface-container: var(--tg-theme-secondary-bg-color, #211f26);
+        --md-on-surface: var(--tg-theme-text-color, #e6e1e9);
+        --md-on-surface-variant: var(--tg-theme-hint-color, #cac4d0);
+        --md-outline: var(--tg-theme-hint-color, #938f99);
+        --md-outline-variant: var(--tg-theme-hint-color, #49454f);
+    }
+}
+
+/* ── Reset & base ──────────────────────────────────────────────── */
 *,
 *::before,
 *::after {
@@ -7,140 +59,394 @@
     box-sizing: border-box;
 }
 
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI",
         "Helvetica Neue", Arial, sans-serif;
-    background: var(--tg-theme-bg-color, #ffffff);
-    color: var(--tg-theme-text-color, #222222);
-    padding: 16px;
+    background: var(--md-surface);
+    color: var(--md-on-surface);
+    padding: 16px 20px 32px;
     min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: flex-start;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
-/* ── Container ─────────────────────────────────────────────── */
-.container {
-    max-width: 400px;
+/* ── App shell ─────────────────────────────────────────────────── */
+.app {
+    max-width: 420px;
     width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
-h1 {
+/* ── Header ────────────────────────────────────────────────────── */
+.app__header {
+    padding: 8px 4px 4px;
+}
+
+.app__title {
     font-size: 24px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    color: var(--tg-theme-text-color, #222222);
+    line-height: 32px;
+    font-weight: 500;
+    letter-spacing: 0;
+    color: var(--md-on-surface);
 }
 
-.subtitle {
+.app__subtitle {
     font-size: 14px;
-    color: var(--tg-theme-hint-color, #999999);
-    margin-bottom: 24px;
+    line-height: 20px;
+    font-weight: 400;
+    letter-spacing: 0.1px;
+    color: var(--md-on-surface-variant);
+    margin-top: 4px;
 }
 
-/* ── Form groups ───────────────────────────────────────────── */
-.form-group {
-    margin-bottom: 20px;
+/* ── Card / surface container ──────────────────────────────────── */
+.card {
+    background: var(--md-surface-container);
+    border-radius: var(--md-radius-lg);
+    padding: 8px 20px 20px;
+    box-shadow: var(--md-elevation-1);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
 }
 
-.form-group label {
-    display: block;
+/* ── Field ─────────────────────────────────────────────────────── */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.field__label {
+    font-size: 13px;
+    line-height: 18px;
+    font-weight: 500;
+    letter-spacing: 0.1px;
+    color: var(--md-on-surface-variant);
+    padding-left: 4px;
+}
+
+/* ── Segmented button (language) ───────────────────────────────── */
+.segmented {
+    display: flex;
+    gap: 0;
+    border-radius: var(--md-radius-full);
+    border: 1px solid var(--md-outline);
+    overflow: hidden;
+    padding: 2px;
+}
+
+.segmented__btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    font: inherit;
     font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    color: var(--tg-theme-text-color, #222222);
-}
-
-select,
-input[type="range"] {
-    width: 100%;
-}
-
-select {
-    padding: 12px 14px;
-    font-size: 16px;
-    border: 1px solid var(--tg-theme-hint-color, #cccccc);
-    border-radius: 10px;
-    background: var(--tg-theme-secondary-bg-color, #f0f0f0);
-    color: var(--tg-theme-text-color, #222222);
-    appearance: none;
-    -webkit-appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23999' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 14px center;
+    font-weight: 500;
+    letter-spacing: 0.1px;
+    padding: 8px 12px;
+    border-radius: var(--md-radius-full);
     cursor: pointer;
-}
-
-select:focus {
-    outline: none;
-    border-color: var(--tg-theme-button-color, #3390ec);
-}
-
-/* ── Duration slider ───────────────────────────────────────── */
-.duration-row {
     display: flex;
     align-items: center;
-    gap: 12px;
+    justify-content: center;
+    gap: 6px;
+    transition: background var(--md-duration-short) var(--md-easing-standard),
+        color var(--md-duration-short) var(--md-easing-standard);
+    position: relative;
+    overflow: hidden;
 }
 
-.duration-row input[type="range"] {
-    flex: 1;
-    height: 6px;
-    border-radius: 3px;
-    background: var(--tg-theme-hint-color, #cccccc);
+.segmented__btn + .segmented__btn {
+    margin-left: 2px;
+}
+
+.segmented__btn:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+}
+
+.segmented__btn.is-selected {
+    background: var(--md-surface);
+    color: var(--md-on-surface);
+    box-shadow: var(--md-elevation-1);
+}
+
+.segmented__btn.is-selected::before {
+    content: "✓";
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--md-primary);
+}
+
+/* ── Outlined select (campus) ──────────────────────────────────── */
+.select {
+    position: relative;
+    border: 1px solid var(--md-outline);
+    border-radius: var(--md-radius-xs);
+    background: var(--md-surface);
+    transition: border-color var(--md-duration-short) var(--md-easing-standard);
+}
+
+.select:hover {
+    border-color: var(--md-on-surface);
+}
+
+.select:focus-within {
+    border-color: var(--md-primary);
+    border-width: 2px;
+}
+
+.select select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    font: inherit;
+    font-size: 16px;
+    line-height: 24px;
+    padding: 14px 44px 14px 16px;
+    cursor: pointer;
+    border-radius: var(--md-radius-xs);
+}
+
+.select select:focus {
     outline: none;
+}
+
+.select__icon {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--md-on-surface-variant);
+    font-size: 10px;
+    line-height: 1;
+}
+
+/* ── Material 3 slider ─────────────────────────────────────── */
+:root {
+    --md-track-inactive: color-mix(in srgb, var(--md-on-surface) 30%, transparent);
+    --md-thumb-size: 20px;
+    --md-track-height: 4px;
+    --md-thumb-half: 10px;
+}
+
+.slider {
+    position: relative;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    padding: 0 var(--md-thumb-half);
+}
+
+.slider input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-}
-
-.duration-row input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--tg-theme-button-color, #3390ec);
-    cursor: pointer;
-    border: 2px solid var(--tg-theme-bg-color, #ffffff);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-.duration-row input[type="range"]::-moz-range-thumb {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--tg-theme-button-color, #3390ec);
-    cursor: pointer;
-    border: 2px solid var(--tg-theme-bg-color, #ffffff);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-}
-
-#duration-value {
-    min-width: 36px;
-    font-size: 16px;
-    font-weight: 600;
-    text-align: center;
-    color: var(--tg-theme-button-color, #3390ec);
-}
-
-/* ── Save button ───────────────────────────────────────────── */
-.btn-save {
     width: 100%;
-    padding: 14px;
-    font-size: 17px;
-    font-weight: 600;
-    border: none;
-    border-radius: 12px;
-    background: var(--tg-theme-button-color, #3390ec);
-    color: var(--tg-theme-button-text-color, #ffffff);
+    height: var(--md-track-height);
+    border-radius: 2px;
+    background: transparent;
     cursor: pointer;
-    transition: opacity 0.15s ease;
-    margin-top: 8px;
+    outline: none;
+    margin: 0;
 }
 
-.btn-save:hover {
-    opacity: 0.9;
+/* WebKit track: active fill (primary) + inactive remainder (on-surface 30%) */
+.slider input[type="range"]::-webkit-slider-runnable-track {
+    height: var(--md-track-height);
+    border-radius: 2px;
+    background: linear-gradient(
+        to right,
+        var(--md-primary) 0%,
+        var(--md-primary) var(--slider-fill, 14%),
+        var(--md-track-inactive) var(--slider-fill, 14%),
+        var(--md-track-inactive) 100%
+    );
 }
 
-.btn-save:active {
-    opacity: 0.7;
+.slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: var(--md-thumb-size);
+    height: var(--md-thumb-size);
+    margin-top: -8px; /* (trackHeight - thumbSize) / 2 */
+    border-radius: 50%;
+    background: var(--md-primary);
+    border: none;
+    box-shadow: var(--md-elevation-1);
+    cursor: pointer;
+    transition: box-shadow var(--md-duration-short) var(--md-easing-standard),
+        transform var(--md-duration-short) var(--md-easing-standard);
+}
+
+/* Hover: circular state-layer halo (MD3) */
+.slider input[type="range"]:hover::-webkit-slider-thumb {
+    box-shadow: var(--md-elevation-1),
+        0 0 0 8px color-mix(in srgb, var(--md-primary) 16%, transparent);
+}
+
+/* Active/pressed: bigger halo + slight grow */
+.slider input[type="range"]:active::-webkit-slider-thumb {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--md-primary) 24%, transparent);
+}
+
+/* Firefox */
+.slider input[type="range"]::-moz-range-track {
+    height: var(--md-track-height);
+    border-radius: 2px;
+    background: var(--md-track-inactive);
+}
+
+.slider input[type="range"]::-moz-range-progress {
+    height: var(--md-track-height);
+    border-radius: 2px;
+    background: var(--md-primary);
+}
+
+.slider input[type="range"]::-moz-range-thumb {
+    width: var(--md-thumb-size);
+    height: var(--md-thumb-size);
+    border: none;
+    border-radius: 50%;
+    background: var(--md-primary);
+    box-shadow: var(--md-elevation-1);
+    cursor: pointer;
+}
+
+/* Value bubble floating above the thumb */
+.slider__value {
+    position: absolute;
+    bottom: calc(50% + 16px); /* sit just above the thumb */
+    /* Track the thumb purely in CSS: the thumb center sits at
+       thumbSize + pct*(100% - 2*thumbSize) within the slider, where 100%
+       is the slider width and pct is the fraction (0..1) set by JS.
+       No JS pixel math → always aligned, robust to resize/font load. */
+    left: calc(
+        var(--md-thumb-size) + var(--pct, 0.1428) * (100% - 2 * var(--md-thumb-size))
+    );
+    transform: translateX(-50%) translateY(4px);
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    padding: 5px 8px;
+    border-radius: var(--md-radius-xs);
+    pointer-events: none;
+    white-space: nowrap;
+    opacity: 0;
+    transition: left var(--md-duration-short) var(--md-easing-standard),
+                opacity var(--md-duration-short) var(--md-easing-standard),
+                transform var(--md-duration-short) var(--md-easing-standard);
+    box-shadow: var(--md-elevation-1);
+}
+
+.slider.is-dragging .slider__value {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.slider__value::after {
+    content: "";
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 7px;
+    height: 7px;
+    background: var(--md-primary);
+}
+
+/* Scale labels aligned to the track ends */
+.slider__scale {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 var(--md-thumb-half);
+    margin-top: 2px;
+}
+
+.slider__scale span {
+    font-size: 11px;
+    color: var(--md-on-surface-variant);
+}
+
+/* ── Filled button (save) ──────────────────────────────────────── */
+.btn {
+    position: relative;
+    overflow: hidden;
+    border: none;
+    border-radius: var(--md-radius-full);
+    font: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    padding: 14px 24px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: box-shadow var(--md-duration-short) var(--md-easing-standard),
+        background var(--md-duration-short) var(--md-easing-standard);
+    -webkit-tap-highlight-color: transparent;
+}
+
+.btn--filled {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    box-shadow: var(--md-elevation-1);
+}
+
+.btn--filled:hover {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16),
+        0 2px 6px 2px rgba(0, 0, 0, 0.06);
+}
+
+.btn--filled:active {
+    box-shadow: var(--md-elevation-1);
+}
+
+.btn[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Ripple effect */
+.ripple {
+    position: absolute;
+    border-radius: 50%;
+    transform: scale(0);
+    background: color-mix(in srgb, var(--md-on-primary) 32%, transparent);
+    pointer-events: none;
+    animation: ripple 0.6s var(--md-easing-standard);
+}
+
+@keyframes ripple {
+    to {
+        transform: scale(4);
+        opacity: 0;
+    }
+}
+
+/* ── Footer hint ───────────────────────────────────────────────── */
+.app__footer {
+    text-align: center;
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--md-on-surface-variant);
+    padding: 0 8px;
 }

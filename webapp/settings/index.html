@@ -2,41 +2,62 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>AuleLiberePoliMi — Settings</title>
     <!-- Telegram Mini App CDN (required) -->
     <script src="https://telegram.org/js/telegram-web-app.js?62"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap"
+        rel="stylesheet"
+    />
     <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="container">
-        <h1>⚙️ Preferences</h1>
-        <p class="subtitle">Set your preferences for quick search</p>
+    <div class="app">
+        <header class="app__header">
+            <h1 class="app__title" data-i18n="title">Preferences</h1>
+            <p class="app__subtitle" data-i18n="subtitle">Set your preferences for quick search.</p>
+        </header>
 
-        <div class="form-group">
-            <label for="lang">🌐 Language / Lingua</label>
-            <select id="lang">
-                <option value="en">🇬🇧 English</option>
-                <option value="it">🇮🇹 Italiano</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="campus">🏫 Preferred Campus</label>
-            <select id="campus">
-                <option value="">— Select a campus —</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="duration">⏱ Search Duration (hours)</label>
-            <div class="duration-row">
-                <input type="range" id="duration" min="1" max="8" value="2" />
-                <span id="duration-value">2h</span>
+        <section class="card">
+            <!-- Language: segmented button -->
+            <div class="field">
+                <span class="field__label" data-i18n="languageLabel">Language</span>
+                <div class="segmented" id="lang-segmented" role="tablist" aria-label="Language">
+                    <button type="button" class="segmented__btn" data-lang="en" role="tab">🇬🇧 English</button>
+                    <button type="button" class="segmented__btn" data-lang="it" role="tab">🇮🇹 Italiano</button>
+                </div>
             </div>
-        </div>
 
-        <button id="save-btn" class="btn-save">💾 Save Preferences</button>
+            <!-- Campus: outlined select -->
+            <div class="field">
+                <label class="field__label" for="campus" data-i18n="campusLabel">Preferred campus</label>
+                <div class="select">
+                    <select id="campus"></select>
+                    <span class="select__icon" aria-hidden="true">▼</span>
+                </div>
+            </div>
+
+            <!-- Duration: Material slider -->
+            <div class="field">
+                <span class="field__label" data-i18n="durationLabel">Search duration (hours)</span>
+                <div class="slider">
+                    <input type="range" id="duration" min="1" max="8" step="1" value="2" />
+                    <span class="slider__value" id="duration-value">2h</span>
+                </div>
+                <div class="slider__scale" aria-hidden="true">
+                    <span>1h</span><span>8h</span>
+                </div>
+            </div>
+        </section>
+
+        <button id="save-btn" type="button" class="btn btn--filled">
+            <span class="btn__label" data-i18n="saveBtn">Save preferences</span>
+        </button>
+
+        <p class="app__footer" data-i18n="footer">Preferences are stored on your device.</p>
     </div>
     <script src="script.js"></script>
 </body>
