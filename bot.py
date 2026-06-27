@@ -126,8 +126,12 @@ KEYBOARDS = keyboard_builder.KeyboadBuilder(texts, location_dict, WEBAPP_URL)
 # ══════════════════════════════════════════════════════════════════
 #  HELPERS
 # ══════════════════════════════════════════════════════════════════
-def get_lang(update: Update) -> str:
-    """Get user's Telegram language, falling back to 'en'."""
+def get_lang(update: Update, context: ContextTypes.DEFAULT_TYPE = None) -> str:
+    """Get user's language from Mini App preferences or Telegram language_code."""
+    prefs = context.user_data.get("preferences", {}) if context else {}
+    pref_lang = prefs.get("lang")
+    if pref_lang and pref_lang in texts:
+        return pref_lang
     user = update.effective_user
     if user and user.language_code and user.language_code in texts:
         return user.language_code
@@ -148,6 +152,13 @@ async def handle_web_app_data(
     """
     Receive preferences from Telegram Mini App.
     Stored ephemerally in context.user_data — lost on bot restart.
+
+    On save we re-send the main menu keyboard in the newly chosen
+    language so the interface buttons update immediately — no /start
+    needed. This handler is registered before the ConversationHandler
+    and only matches WEB_APP_DATA (not TEXT), so it never disturbs the
+    conversation state; the ⚙️ button is reachable only from the main
+    menu, so the user is effectively at INITIAL_STATE.
     """
     web_app_data = update.effective_message.web_app_data
     if not web_app_data:
@@ -156,9 +167,16 @@ async def handle_web_app_data(
     try:
         preferences = json.loads(web_app_data.data)
         context.user_data["preferences"] = preferences
-        lang = preferences.get("lang", get_lang(update))
+
+        pref_lang = preferences.get("lang")
+        lang = pref_lang if pref_lang in texts else get_lang(update, context)
+
+        # Re-send the main menu so the ReplyKeyboard buttons reflect the
+        # new language right away.
+        keyboard = KEYBOARDS.initial_keyboard(lang)
         await update.message.reply_text(
-            texts[lang]["texts"].get("success", "✅ Preferences saved!")
+            texts[lang]["texts"].get("success", "✅ Preferences saved!"),
+            reply_markup=ReplyKeyboardMarkup(keyboard),
         )
         logging.info(
             "Preferences saved for %s: %s",
@@ -166,7 +184,7 @@ async def handle_web_app_data(
             preferences,
         )
     except (json.JSONDecodeError, TypeError) as e:
-        lang = get_lang(update)
+        lang = get_lang(update, context)
         logging.warning("Invalid web_app_data: %s", e)
         await update.message.reply_text("❌ Invalid data received.")
 
@@ -177,7 +195,7 @@ async def handle_web_app_data(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Welcome message and main menu."""
-    lang = get_lang(update)
+    lang = get_lang(update, context)
     user = update.effective_user
     keyboard = KEYBOARDS.initial_keyboard(lang)
 
@@ -201,7 +219,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def initial_state(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Route user's main-menu choice to the right handler."""
     message = update.message.text
-    lang = get_lang(update)
+    lang = get_lang(update, context)
 
     handler_name = _label_to_handler.get(message)
 
@@ -289,7 +307,7 @@ async def set_location_state(
 ) -> int:
     """Save chosen campus and ask for day."""
     message = update.message.text
-    lang = get_lang(update)
+    lang = get_lang(update, context)
 
     if not input_check.location_check(message, location_dict):
         await errorhandler.bonk(update, texts, lang)
@@ -310,7 +328,7 @@ async def set_day_state(
 ) -> int:
     """Save chosen day and ask for start time."""
     message = update.message.text
-    lang = get_lang(update)
+    lang = get_lang(update, context)
 
     ok, chosen_date = input_check.day_check(message, texts, lang)
     if not ok:
@@ -332,7 +350,7 @@ async def set_start_time_state(
 ) -> int:
     """Save start time and ask for end time."""
     message = update.message.text
-    lang = get_lang(update)
+    lang = get_lang(update, context)
 
     ok, start_time = input_check.start_time_check(message)
     if not ok:
@@ -354,7 +372,7 @@ async def end_state(
 ) -> int:
     """Validate end time, execute search, show results."""
     message = update.message.text
-    lang = get_lang(update)
+    lang = get_lang(update, context)
 
     start_time = context.user_data.get("start_time")
     date = context.user_data.get("date")
@@ -437,7 +455,7 @@ async def _perform_search(
 # ── Fallbacks ──────────────────────────────────────────────────────
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel current operation and return to initial state."""
-    lang = get_lang(update)
+    lang = get_lang(update, context)
     keyboard = KEYBOARDS.initial_keyboard(lang)
     logging.info(
         "%s canceled operation",
@@ -453,7 +471,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def terminate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End the conversation entirely."""
-    lang = get_lang(update)
+    lang = get_lang(update, context)
     context.user_data.clear()
     logging.info(
         "%s terminated conversation",
@@ -471,7 +489,7 @@ async def info_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     Info handler reachable from any state (fallback).
     Shows info and returns to the same state (or initial).
     """
-    lang = get_lang(update)
+    lang = get_lang(update, context)
     keyboard = KEYBOARDS.initial_keyboard(lang)
     await update.message.reply_text(
         texts[lang]["texts"]["info"],
